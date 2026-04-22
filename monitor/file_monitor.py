@@ -1,18 +1,22 @@
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from utils.logger import log
 
 class FileHandler(FileSystemEventHandler):
     def __init__(self, callback):
         self.callback = callback
 
-    def on_modified(self, event):
-        log(f"Modified: {event.src_path}")
-        self.callback("modified")
-
     def on_created(self, event):
-        log(f"Created: {event.src_path}")
-        self.callback("created")
+        if not event.is_directory:
+            self.callback("created", event.src_path)
+
+    def on_deleted(self, event):
+        if not event.is_directory:
+            self.callback("deleted", event.src_path)
+
+    def on_modified(self, event):
+        if not event.is_directory:
+            self.callback("modified", event.src_path)
+
 
 def start_monitor(callback, path):
     observer = Observer()
