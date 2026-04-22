@@ -3,19 +3,26 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5 import QtCore
 
 from monitor.file_monitor import start_monitor
-from monitor.process_monitor import check_process
-from ml.model import train_model
-from ml.predictor import predict
 from response.action import take_action
 from gui.panel import Panel
 
-model = train_model()
-file_events = 0
+# Counters
+created_count = 0
+deleted_count = 0
+encrypted_count = 0
 
 
-def event_callback(event):
-    global file_events
-    file_events += 1
+def event_callback(event_type, path):
+    global created_count, deleted_count, encrypted_count
+
+    if event_type == "created":
+        created_count += 1
+
+        if path.endswith(".enc"):
+            encrypted_count += 1
+
+    elif event_type == "deleted":
+        deleted_count += 1
 
 
 class Controller:
@@ -26,27 +33,46 @@ class Controller:
 
     def start(self, folder):
         self.observer = start_monitor(event_callback, folder)
-        self.timer.start(3000)
+        self.timer.start(2000)
 
     def loop(self):
-        global file_events
+        global created_count, deleted_count, encrypted_count
 
-        cpu_flag = check_process()
-        features = [file_events, cpu_flag]
+        threat = None
+        score = 0
 
-        threat_score = predict(model, features)
+        # 🔴 Mass Deletion
+        if deleted_count >= 100:
+            threat = "Mass Deletion Detected"
+            score = 0.9
 
-        self.panel.update_score(threat_score)
+        # 🟣 Encryption
+        elif encrypted_count >= 5:
+            threat = "Encryption Activity Detected"
+            score = 0.8
 
-        if threat_score > 0.6:
-            self.panel.update_status("THREAT DETECTED", "red")
+        # 🟡 Mass Creation
+        elif created_count >= 20:
+            threat = "Mass File Creation Detected"
+            score = 0.6
 
-            if self.panel.show_permission():
+        # Update UI
+        self.panel.update_score(score)
+
+        if threat:
+            self.panel.update_status(threat, "red")
+
+            allow_block = self.panel.show_permission()
+
+            if allow_block:
                 take_action()
         else:
             self.panel.update_status("SAFE", "green")
 
-        file_events = 0
+        # RESET COUNTS every cycle
+        created_count = 0
+        deleted_count = 0
+        encrypted_count = 0
 
 
 app = QApplication(sys.argv)
